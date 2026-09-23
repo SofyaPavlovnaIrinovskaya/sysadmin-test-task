@@ -1,0 +1,86 @@
+Шаг 1. Вход в систему
+После первой загрузки Ubuntu Server предложит ввести логин и пароль, которые вы создали при установке:
+ubuntu-server login: user
+Password: 
+Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-88-generic x86_64)
+
+user@ubuntu-server:~$ 
+Шаг 2. Определение имени сетевого адаптера
+Интерфейсы в Linux могут называться по-разному в зависимости от гипервизора (enp0s3 в VirtualBox, ens33 в VMware, eth0 и т.д.).
+Введите команду:
+ip link
+Пример ответа системы:
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+    link/ether 08:00:27:d3:4e:8b brd ff:ff:ff:ff:ff:ff
+🔍 НА ЧТО ОБРАТИТЬ ВНИМАНИЕ: Посмотрите на строку №2: 2: enp0s3: <BROADCAST,....
+Имя вашего адаптера: enp0s3 (у вас может быть другое имя, например ens33 или eth0).
+Зачем это нужно: Скопируйте или запомните это имя. Его нужно будет подставить в файл конфигурации netplan вместо примера.
+Шаг 3. Определение текущей подсети и шлюза
+Чтобы корректно задать статический IP, посмотрите текущий адрес, выданный по DHCP:
+Введите команду:
+ip a
+Пример ответа системы:
+2: enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+    link/ether 08:00:27:d3:4e:8b brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.50/24 brd 192.168.1.255 scope global dynamic enp0s3
+       valid_lft 86123sec preferred_lft 86123sec
+🔍 НА ЧТО ОБРАТИТЬ ВНИМАНИЕ: В строке inet 192.168.1.50/24:
+192.168.1.0/24 — ваша текущая локальная подсеть.
+Зачем это нужно: В конфигурации укажем статический адрес из этой же сети (например, 192.168.1.100/24), а шлюзом (gateway) укажем адрес вашего роутера — обычно 192.168.1.1.
+Шаг 4. Поиск конфигурационного файла Netplan
+В Ubuntu за настройку сети отвечает служба Netplan. Имя файла конфигурации может отличаться.
+Введите команду:
+ls /etc/netplan/
+Пример ответа системы:
+00-installer-config.yaml
+🔍 НА ЧТО ОБРАТИТЬ ВНИМАНИЕ: Вы увидите имя файла (например, 00-installer-config.yaml или 01-netcfg.yaml). Запомните его.
+Шаг 5. Редактирование конфигурации Netplan
+Откройте найденный файл в текстовом редакторе nano:
+sudo nano /etc/netplan/00-installer-config.yaml
+Удалите текущее содержимое и вставьте следующий шаблон (заменив enp0s3 на ваше имя интерфейса из Шага 2):
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp0s3:                     # <-- ВСТАВЬТЕ ИМЯ ВАШЕГО ИНТЕРФЕЙСА СЮДА
+      dhcp4: no
+      addresses:
+        - 192.168.1.100/24      # <-- ВАШ СТАТИЧЕСКИЙ IP
+      routes:
+        - to: default
+          via: 192.168.1.1      # <-- IP ВАШЕГО ШЛЮЗА/РОУТЕРА
+      nameservers:
+        addresses:
+          - 8.8.8.8
+          - 1.1.1.1
+
+  vlans:
+    vlan10:
+      id: 10
+      link: enp0s3              # <-- ВСТАВЬТЕ ИМЯ ВАШЕГО ИНТЕРФЕЙСА СЮДА
+      addresses:
+        - 10.10.10.1/24
+
+    vlan20:
+      id: 20
+      link: enp0s3              # <-- ВСТАВЬТЕ ИМЯ ВАШЕГО ИНТЕРФЕЙСА СЮДА
+      addresses:
+        - 10.20.20.1/24
+Чтобы сохранить файл в nano: нажмите Ctrl + O, затем Enter.
+Чтобы выйти: нажмите Ctrl + X.
+Шаг 6. Применение и проверка настроек
+Примените изменения командой:
+sudo netplan apply
+Проверьте, что статический IP и виртуальные интерфейсы vlan10 и vlan20 успешно поднялись:
+ip a
+Пример ответа системы после успешной настройки:
+2: enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+    inet 192.168.1.100/24 brd 192.168.1.255 scope global enp0s3
+3: vlan10@enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    inet 10.10.10.1/24 brd 10.10.10.255 scope global vlan10
+4: vlan20@enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    inet 10.20.20.1/24 brd 10.20.20.255 scope global vlan20
+🔍 НА ЧТО ОБРАТИТЬ ВНИМАНИЕ: В выводе должны появиться интерфейсы vlan10@enp0s3 с адресом 10.10.10.1/24 и vlan20@enp0s3 с адресом 10.20.20.1/24
+. Сделайте скриншот этого экрана — он пригодится для отчета и видеодемонстрации
