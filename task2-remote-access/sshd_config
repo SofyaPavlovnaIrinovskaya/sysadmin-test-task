@@ -1,0 +1,25 @@
+# Основные настройки службы SSH
+Include /etc/ssh/sshd_config.d/*.conf
+
+# Порт, на котором работает SSH (по умолчанию 22)
+Port 22
+
+# Запрет входа под root напрямую (безопасность)
+PermitRootLogin no
+
+# Разрешаем аутентификацию по публичным SSH-ключам
+PubkeyAuthentication yes
+
+# Полный запрет входа по обычному паролю (защита от взлома)
+PasswordAuthentication no
+PermitEmptyPasswords no
+
+# Разрешаем интерактивную клавиатурную аутентификацию (можно оставить no, если используются только ключи)
+KbdInteractiveAuthentication no
+
+# Использование путей к файлам ключей по умолчанию
+AuthorizedKeysFile      .ssh/authorized_keys
+
+# Дополнительные настройки безопасности
+X11Forwarding no
+Subsystem sftp /usr/lib/openssh/sftp-server
